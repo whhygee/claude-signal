@@ -164,17 +164,23 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             guard let app = NSRunningApplication(processIdentifier: ancestor),
                   app.activationPolicy == .regular
             else { continue }
-            app.unhide()
-            if #available(macOS 14.0, *) {
-                // Cooperative activation: hand our activation claim to the
-                // target, or plain activate() from an accessory app is a no-op.
-                NSApp.yieldActivation(to: app)
-                app.activate(options: [.activateAllWindows])
-            } else {
-                app.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
-            }
+            bringToFront(app)
             return
         }
+    }
+
+    /// Activation from an accessory app is refused in several ways across
+    /// macOS versions, so cascade: cooperative activate, legacy forced
+    /// activate, then Dock-click semantics via NSWorkspace (which reliably
+    /// raises a running app without spawning a second instance).
+    private func bringToFront(_ app: NSRunningApplication) {
+        app.unhide()
+        if app.activate(options: [.activateAllWindows]) { return }
+        if app.activate(options: [.activateAllWindows, .activateIgnoringOtherApps]) { return }
+        guard let url = app.bundleURL else { return }
+        let configuration = NSWorkspace.OpenConfiguration()
+        configuration.activates = true
+        NSWorkspace.shared.openApplication(at: url, configuration: configuration)
     }
 
     @objc private func toggleFloatingLight() {

@@ -77,9 +77,17 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         menu.addItem(floating)
 
         if floatingLight.isEnabled {
-            let rotate = NSMenuItem(title: "Rotate Floating Light", action: #selector(rotateFloatingLight), keyEquivalent: "")
-            rotate.target = self
-            menu.addItem(rotate)
+            let orientationItem = NSMenuItem(title: "Orientation", action: nil, keyEquivalent: "")
+            let submenu = NSMenu()
+            for orientation in LightOrientation.allCases {
+                let choice = NSMenuItem(title: orientation.title, action: #selector(setOrientation(_:)), keyEquivalent: "")
+                choice.target = self
+                choice.representedObject = orientation
+                choice.state = floatingLight.orientation == orientation ? .on : .off
+                submenu.addItem(choice)
+            }
+            orientationItem.submenu = submenu
+            menu.addItem(orientationItem)
         }
 
         let clear = NSMenuItem(title: "Clear All", action: #selector(clearAll), keyEquivalent: "")
@@ -141,8 +149,9 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         floatingLight.update(sessions: sessions)
     }
 
-    @objc private func rotateFloatingLight() {
-        floatingLight.rotate()
+    @objc private func setOrientation(_ sender: NSMenuItem) {
+        guard let orientation = sender.representedObject as? LightOrientation else { return }
+        floatingLight.setOrientation(orientation)
     }
 
     @objc private func clearAll() {

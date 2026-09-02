@@ -4,9 +4,17 @@ import SignalCore
 /// Optional floating traffic light: a small always-on-top, draggable panel
 /// mirroring the aggregate session state. Toggled from the menu bar menu;
 /// visibility and position persist across launches.
+/// Layout axis of the floating light.
+enum LightOrientation: String, CaseIterable {
+    case vertical
+    case horizontal
+
+    var title: String { rawValue.capitalized }
+}
+
 final class FloatingLightController {
     private static let enabledDefaultsKey = "floatingLightEnabled"
-    private static let verticalDefaultsKey = "floatingLightVertical"
+    private static let orientationDefaultsKey = "floatingLightOrientation"
     private static let frameAutosaveName = "FloatingLight"
 
     private var panel: NSPanel?
@@ -16,9 +24,12 @@ final class FloatingLightController {
         UserDefaults.standard.bool(forKey: Self.enabledDefaultsKey)
     }
 
-    private var isVertical: Bool {
-        get { UserDefaults.standard.object(forKey: Self.verticalDefaultsKey) as? Bool ?? true }
-        set { UserDefaults.standard.set(newValue, forKey: Self.verticalDefaultsKey) }
+    private(set) var orientation: LightOrientation {
+        get {
+            UserDefaults.standard.string(forKey: Self.orientationDefaultsKey)
+                .flatMap(LightOrientation.init(rawValue:)) ?? .vertical
+        }
+        set { UserDefaults.standard.set(newValue.rawValue, forKey: Self.orientationDefaultsKey) }
     }
 
     func applyPersistedState() {
@@ -35,10 +46,9 @@ final class FloatingLightController {
         lightView?.render(worst: sessions.first?.state, count: sessions.count)
     }
 
-    /// Flips vertical ↔ horizontal. Orientation is an explicit setting,
-    /// changed only here — resizing just scales the current shape.
-    func rotate() {
-        isVertical.toggle()
+    func setOrientation(_ newOrientation: LightOrientation) {
+        guard newOrientation != orientation else { return }
+        orientation = newOrientation
         applyOrientation(animated: true)
     }
 
@@ -47,10 +57,10 @@ final class FloatingLightController {
     /// center. Also repairs a frame saved with bad proportions.
     private func applyOrientation(animated: Bool) {
         guard let panel, let lightView else { return }
-        lightView.isVertical = isVertical
+        lightView.isVertical = orientation == .vertical
 
         let base = TrafficLightView.defaultSize
-        let aspect = isVertical
+        let aspect = orientation == .vertical
             ? base
             : NSSize(width: base.height, height: base.width)
         panel.contentAspectRatio = aspect
@@ -139,7 +149,31 @@ final class TrafficLightView: NSView {
         didSet { needsDisplay = true }
     }
 
+    private var isHovering = false
+
     override var mouseDownCanMoveWindow: Bool { true }
+
+    // MARK: - Hover tracking (resize affordance)
+
+    override func updateTrackingAreas() {
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(
+            rect: .zero,
+            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+            owner: self
+        ))
+        super.updateTrackingAreas()
+    }
+
+    override func mouseEntered(with event: NSEvent) {
+        isHovering = true
+        needsDisplay = true
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        isHovering = false
+        needsDisplay = true
+    }
 
     func render(worst: SessionState?, count: Int) {
         guard worst != self.worst || count != self.count else { return }
@@ -187,6 +221,26 @@ final class TrafficLightView: NSView {
                 rect = NSRect(x: left + offset, y: bounds.midY - diameter / 2, width: diameter, height: diameter)
             }
             drawLamp(in: rect, color: color, lit: state == worst)
+        }
+
+        if isHovering {
+            drawResizeGrip()
+        }
+    }
+
+    /// Classic diagonal-lines grip in the bottom-right corner, shown on
+    /// hover so users discover the edge-drag resize.
+    private func drawResizeGrip() {
+        let inset: CGFloat = 5
+        let corner = NSPoint(x: bounds.maxX - inset, y: bounds.minY + inset)
+        NSColor.white.withAlphaComponent(0.55).setStroke()
+        for line in 1...3 {
+            let offset = CGFloat(line) * 3.5
+            let path = NSBezierPath()
+            path.move(to: NSPoint(x: corner.x - offset, y: corner.y))
+            path.line(to: NSPoint(x: corner.x, y: corner.y + offset))
+            path.lineWidth = 1.5
+            path.stroke()
         }
     }
 

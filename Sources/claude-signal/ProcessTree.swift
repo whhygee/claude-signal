@@ -16,6 +16,19 @@ enum ProcessTree {
         return nil
     }
 
+    /// PIDs from `pid` up toward launchd, `pid` itself included.
+    static func ancestry(of pid: pid_t) -> [pid_t] {
+        var chain: [pid_t] = []
+        var current = pid
+        for _ in 0..<15 {
+            guard current > 1 else { break }
+            chain.append(current)
+            guard let process = info(of: current) else { break }
+            current = process.parent
+        }
+        return chain
+    }
+
     private struct Info {
         let parent: pid_t
         let command: String

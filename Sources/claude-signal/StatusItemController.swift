@@ -101,6 +101,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         label.append(NSAttributedString(string: "\(directory)  —  \(session.state.rawValue)  (\(time))"))
         item.attributedTitle = label
         item.toolTip = "\(session.cwd)\n\(session.id)"
+        if session.pid != nil {
+            item.representedObject = session
+            item.action = #selector(focusSession(_:))
+            item.target = self
+            item.toolTip = "Click to open this session's window\n\(session.cwd)\n\(session.id)"
+        }
         return item
     }
 
@@ -111,6 +117,24 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }()
 
     // MARK: - Actions
+
+    /// Brings the app window hosting this session's claude process to the
+    /// front: the first ancestor that is a regular GUI app (the terminal
+    /// window's process, or the IDE for embedded terminals).
+    @objc private func focusSession(_ sender: NSMenuItem) {
+        guard let session = sender.representedObject as? Session, let pid = session.pid else { return }
+        for ancestor in ProcessTree.ancestry(of: pid) {
+            guard let app = NSRunningApplication(processIdentifier: ancestor),
+                  app.activationPolicy == .regular
+            else { continue }
+            if #available(macOS 14.0, *) {
+                app.activate()
+            } else {
+                app.activate(options: [.activateIgnoringOtherApps])
+            }
+            return
+        }
+    }
 
     @objc private func toggleFloatingLight() {
         floatingLight.toggle()

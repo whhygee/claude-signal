@@ -2,6 +2,8 @@
 
 Menu bar traffic light for your Claude Code sessions.
 
+[▶ Watch the demo](media/demo.mp4)
+
 - 🔴 **Red** — at least one session is waiting on you (permission prompt or idle)
 - 🟡 **Yellow** — all sessions are working
 - 🟢 **Green** — results ready

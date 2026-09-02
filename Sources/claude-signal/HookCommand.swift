@@ -32,6 +32,13 @@ enum HookCommand {
             exit(0)
         }
 
+        // Session start: besides marking the session ready, capture which
+        // terminal window it lives in while that window is still frontmost.
+        if argument == "start" {
+            record(state: .done, event: event, windowID: WindowCapture.currentWindowID())
+            exit(0)
+        }
+
         // Notifications fire both for permission prompts (session genuinely
         // blocked) and for plain idle after a finished turn. A `done` session
         // is not blocked — only escalate to `waiting` while mid-turn.
@@ -50,13 +57,16 @@ enum HookCommand {
         record(state: state, event: event)
     }
 
-    private static func record(state: SessionState, event: HookEvent) {
+    private static func record(state: SessionState, event: HookEvent, windowID: UInt32? = nil) {
         let session = Session(
             id: event.sessionID,
             state: state,
             pid: ProcessTree.findClaudePID(),
             cwd: event.cwd ?? "",
-            timestamp: Date().timeIntervalSince1970
+            timestamp: Date().timeIntervalSince1970,
+            // The window is captured once at session start; later state
+            // changes carry it forward.
+            windowID: windowID ?? SessionStore.read(id: event.sessionID)?.windowID
         )
         try? SessionStore.write(session)
     }

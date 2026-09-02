@@ -4,7 +4,8 @@ import Foundation
 /// Idempotent: replaces any previous claude-signal hook entries, preserves everything else.
 enum InitCommand {
     private static let eventStates: [(event: String, state: String)] = [
-        ("SessionStart", "done"),
+        // `start` marks the session ready AND captures its terminal window.
+        ("SessionStart", "start"),
         ("UserPromptSubmit", "running"),
         // `notify` escalates to waiting only mid-turn; idle notifications
         // after a finished turn keep the session green.

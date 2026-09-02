@@ -164,6 +164,11 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             guard let app = NSRunningApplication(processIdentifier: ancestor),
                   app.activationPolicy == .regular
             else { continue }
+            // Exact window first (terminals host all windows in one process);
+            // app-level activation as the fallback.
+            if let windowID = session.windowID, WindowRaiser.raise(windowID: windowID, appPID: ancestor) {
+                return
+            }
             bringToFront(app)
             return
         }

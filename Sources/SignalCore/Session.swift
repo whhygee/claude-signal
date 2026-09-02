@@ -29,6 +29,9 @@ public struct Session: Codable, Sendable {
     public let cwd: String
     /// Unix timestamp of the last state change.
     public let timestamp: TimeInterval
+    /// CGWindowID of the terminal window hosting the session, captured at
+    /// session start (frontmost window of the terminal app at that moment).
+    public let windowID: UInt32?
 
     private enum CodingKeys: String, CodingKey {
         case id = "session_id"
@@ -36,13 +39,22 @@ public struct Session: Codable, Sendable {
         case pid
         case cwd
         case timestamp = "ts"
+        case windowID = "window_id"
     }
 
-    public init(id: String, state: SessionState, pid: Int32?, cwd: String, timestamp: TimeInterval) {
+    public init(
+        id: String,
+        state: SessionState,
+        pid: Int32?,
+        cwd: String,
+        timestamp: TimeInterval,
+        windowID: UInt32? = nil
+    ) {
         self.id = id
         self.state = state
         self.pid = pid
         self.cwd = cwd
         self.timestamp = timestamp
+        self.windowID = windowID
     }
 }

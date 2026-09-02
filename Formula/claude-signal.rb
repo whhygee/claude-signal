@@ -14,7 +14,7 @@ class ClaudeSignal < Formula
 
   service do
     run [opt_bin/"claude-signal", "menubar"]
-    keep_alive true
+    keep_alive successful_exit: false
     run_type :immediate
   end
 
@@ -23,7 +23,9 @@ class ClaudeSignal < Formula
       Wire up the Claude Code hooks once:
         claude-signal init
 
-      Then run the menu bar app at login:
+      Then either create a Spotlight-launchable app that also starts at login:
+        claude-signal install-app
+      or run it as a plain background service:
         brew services start claude-signal
     EOS
   end

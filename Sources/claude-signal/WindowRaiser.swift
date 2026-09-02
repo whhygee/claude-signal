@@ -11,9 +11,19 @@ private func _AXUIElementGetWindow(_ element: AXUIElement, _ windowID: inout CGW
 /// Requires the user to grant Accessibility access; the first attempt
 /// triggers the system prompt and reports failure so callers can fall back.
 enum WindowRaiser {
+    private static var hasPromptedForAccess = false
+
     static func raise(windowID: CGWindowID, appPID: pid_t) -> Bool {
-        let promptKey = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
-        guard AXIsProcessTrustedWithOptions([promptKey: true] as CFDictionary) else { return false }
+        guard AXIsProcessTrusted() else {
+            // Ask for the Accessibility grant at most once per launch;
+            // afterwards fall back silently instead of nagging on every click.
+            if !hasPromptedForAccess {
+                hasPromptedForAccess = true
+                let promptKey = kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String
+                _ = AXIsProcessTrustedWithOptions([promptKey: true] as CFDictionary)
+            }
+            return false
+        }
         guard let window = axWindow(windowID: windowID, appPID: appPID) else { return false }
 
         AXUIElementPerformAction(window, kAXRaiseAction as CFString)

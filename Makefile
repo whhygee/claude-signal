@@ -12,6 +12,10 @@ install: build
 	mkdir -p $(BIN)
 	install -m 755 .build/release/claude-signal $(BIN)/claude-signal
 
+# Rebuild and refresh the ~/Applications bundle + LaunchAgent.
+app: install
+	$(BIN)/claude-signal install-app
+
 restart: install
 	launchctl kickstart -k gui/$$(id -u)/$(AGENT)
 

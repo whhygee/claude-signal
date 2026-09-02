@@ -33,7 +33,7 @@ enum InitCommand {
             root = parsed
         }
 
-        let executable = resolvedExecutablePath()
+        let executable = Executable.currentPath()
         var hooks = root["hooks"] as? [String: Any] ?? [:]
         for (event, state) in eventStates {
             var entries = hooks[event] as? [[String: Any]] ?? []
@@ -76,24 +76,6 @@ enum InitCommand {
             guard let command = hook["command"] as? String else { return false }
             return ownedCommandMarkers.contains { command.contains($0) }
         }
-    }
-
-    /// Absolute path callers should use to invoke this binary. Prefers the
-    /// PATH-visible location (e.g. the stable Homebrew symlink) over the
-    /// physical path, which changes on every versioned upgrade.
-    private static func resolvedExecutablePath() -> String {
-        let argv0 = CommandLine.arguments[0]
-        if argv0.contains("/") {
-            return URL(fileURLWithPath: argv0).standardizedFileURL.path
-        }
-        let path = ProcessInfo.processInfo.environment["PATH"] ?? ""
-        for directory in path.split(separator: ":") {
-            let candidate = "\(directory)/\(argv0)"
-            if FileManager.default.isExecutableFile(atPath: candidate) {
-                return candidate
-            }
-        }
-        return Bundle.main.executablePath ?? argv0
     }
 
     private static func fail(_ message: String) -> Never {

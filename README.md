@@ -17,9 +17,11 @@ breakdown.
 brew tap whhygee/claude-signal https://github.com/whhygee/claude-signal
 brew install claude-signal
 
-claude-signal init                 # wire up Claude Code hooks
-brew services start claude-signal  # run the menu bar app at login
+claude-signal init         # wire up Claude Code hooks
+claude-signal install-app  # "Claude Signal.app" in ~/Applications: Spotlight + login start
 ```
+
+(Prefer a plain background service instead of an app? `brew services start claude-signal`.)
 
 New Claude Code sessions report their state from then on. Sessions that were
 already running pick it up on their next restart.

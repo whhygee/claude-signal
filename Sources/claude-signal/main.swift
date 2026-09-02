@@ -14,6 +14,8 @@ case "hook":
     HookCommand.run(arguments: Array(arguments.dropFirst()))
 case "init":
     InitCommand.run()
+case "install-app":
+    InstallAppCommand.run()
 case "-h", "--help", "help":
     print(
         """
@@ -23,6 +25,8 @@ case "-h", "--help", "help":
           claude-signal                 Run the menu bar app (red = a session waits on
                                         you, yellow = working, green = results ready)
           claude-signal init            Install session hooks into ~/.claude/settings.json
+          claude-signal install-app     Create “Claude Signal.app” in ~/Applications
+                                        (Spotlight launch) and point the LaunchAgent at it
           claude-signal hook <state>    Record a session state; called by Claude Code
                                         hooks (state: waiting | running | done | notify | end)
         """

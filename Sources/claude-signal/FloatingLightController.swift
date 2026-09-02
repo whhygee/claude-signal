@@ -49,13 +49,27 @@ final class FloatingLightController {
     func setOrientation(_ newOrientation: LightOrientation) {
         guard newOrientation != orientation else { return }
         orientation = newOrientation
-        applyOrientation(animated: true)
+        reshape(animated: true)
     }
 
-    /// Enforces the stored orientation: fixes the view's layout axis, locks
-    /// the resize aspect ratio, and reshapes/clamps the frame around its
-    /// center. Also repairs a frame saved with bad proportions.
-    private func applyOrientation(animated: Bool) {
+    static let minScale: CGFloat = 0.7
+    static let maxScale: CGFloat = 3.0
+
+    /// Current size as a multiple of the base size (1.0 = default).
+    var scale: CGFloat {
+        guard let panel else { return 1 }
+        let base = TrafficLightView.defaultSize
+        return max(panel.frame.width, panel.frame.height) / max(base.width, base.height)
+    }
+
+    func setScale(_ newScale: CGFloat) {
+        reshape(scale: newScale, animated: false)
+    }
+
+    /// Rebuilds the frame from the stored orientation and the given scale
+    /// (current scale if nil), centered where the panel already is. Also
+    /// repairs a frame saved with bad proportions.
+    private func reshape(scale requestedScale: CGFloat? = nil, animated: Bool) {
         guard let panel, let lightView else { return }
         lightView.isVertical = orientation == .vertical
 
@@ -63,17 +77,10 @@ final class FloatingLightController {
         let aspect = orientation == .vertical
             ? base
             : NSSize(width: base.height, height: base.width)
-        panel.contentAspectRatio = aspect
-        panel.minSize = scaled(aspect, by: 0.8)
-        panel.maxSize = scaled(aspect, by: 3.0)
+        let clamped = min(max(requestedScale ?? scale, Self.minScale), Self.maxScale)
 
-        // Rebuild the frame at the current scale (long side preserved),
-        // clamped to bounds, centered where the panel already is.
         let frame = panel.frame
-        let longSide = min(max(max(frame.width, frame.height), max(aspect.width, aspect.height) * 0.8),
-                           max(aspect.width, aspect.height) * 3.0)
-        let scale = longSide / max(aspect.width, aspect.height)
-        let size = scaled(aspect, by: scale)
+        let size = NSSize(width: aspect.width * clamped, height: aspect.height * clamped)
         let reshaped = NSRect(
             x: frame.midX - size.width / 2,
             y: frame.midY - size.height / 2,
@@ -81,10 +88,6 @@ final class FloatingLightController {
             height: size.height
         )
         panel.setFrame(reshaped, display: true, animate: animated)
-    }
-
-    private func scaled(_ size: NSSize, by factor: CGFloat) -> NSSize {
-        NSSize(width: size.width * factor, height: size.height * factor)
     }
 
     // MARK: - Panel lifecycle
@@ -97,9 +100,12 @@ final class FloatingLightController {
 
     private func makePanel() -> NSPanel {
         let size = TrafficLightView.defaultSize
+        // No .resizable: the menu's Size slider is the only resize path.
+        // Borderless edge-resize ignores contentAspectRatio, which allowed
+        // off-aspect frames that skewed the lamp layout.
         let panel = NSPanel(
             contentRect: NSRect(origin: defaultOrigin(for: size), size: size),
-            styleMask: [.borderless, .nonactivatingPanel, .resizable],
+            styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false
         )
@@ -122,7 +128,7 @@ final class FloatingLightController {
         if panel == nil {
             panel = makePanel()
         }
-        applyOrientation(animated: false)
+        reshape(animated: false)
         panel?.orderFrontRegardless()
     }
 

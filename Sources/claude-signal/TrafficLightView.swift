@@ -1,35 +1,21 @@
 import AppKit
 import SignalCore
 
-/// Classic three-lamp traffic light. The lamp for the current aggregate
-/// state glows; the others stay dim. A tail strip at the end of the housing
-/// is a dedicated resize lever: hovering reveals a curved grip there, and
-/// dragging it scales the light (the rest of the housing moves the window).
+/// Boxy three-segment traffic light, styled after a real signal head: a
+/// near-black housing split into equal segments, one glossy lamp per
+/// segment. The lamp for the current aggregate state glows; the others sit
+/// dark. The whole view drags the window; sizing happens via the menu.
 final class TrafficLightView: NSView {
-    static let defaultSize = NSSize(width: 30, height: 84)
+    static let defaultSize = NSSize(width: 34, height: 96)
 
-    private let grip = ResizeGripView()
     private var worst: SessionState?
     private var count = 0
-    private var isHovering = false
 
     /// Layout axis, set by the controller from the persisted orientation —
     /// never inferred from the frame's shape.
     var isVertical = true {
-        didSet {
-            layoutGrip()
-            needsDisplay = true
-        }
+        didSet { needsDisplay = true }
     }
-
-    override init(frame frameRect: NSRect) {
-        super.init(frame: frameRect)
-        addSubview(grip)
-        layoutGrip()
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("not used") }
 
     override var mouseDownCanMoveWindow: Bool { true }
 
@@ -43,181 +29,111 @@ final class TrafficLightView: NSView {
         needsDisplay = true
     }
 
-    // MARK: - Layout
-
-    /// Fraction of the main axis reserved for the resize lever.
-    private var gripStripLength: CGFloat {
-        (isVertical ? bounds.width : bounds.height) * 0.4
-    }
-
-    private func layoutGrip() {
-        grip.frame = isVertical
-            ? NSRect(x: 0, y: 0, width: bounds.width, height: gripStripLength)
-            : NSRect(x: bounds.width - gripStripLength, y: 0, width: gripStripLength, height: bounds.height)
-    }
-
-    override func resizeSubviews(withOldSize oldSize: NSSize) {
-        super.resizeSubviews(withOldSize: oldSize)
-        layoutGrip()
-    }
-
-    // MARK: - Hover tracking (grip reveal)
-
-    override func updateTrackingAreas() {
-        trackingAreas.forEach(removeTrackingArea)
-        addTrackingArea(NSTrackingArea(
-            rect: .zero,
-            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
-            owner: self
-        ))
-        super.updateTrackingAreas()
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        isHovering = true
-        needsDisplay = true
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        isHovering = false
-        needsDisplay = true
-    }
-
     // MARK: - Drawing
 
     override func draw(_ dirtyRect: NSRect) {
         let cross = isVertical ? bounds.width : bounds.height
-        let cornerRadius = cross * 0.45
-        let housing = NSBezierPath(
-            roundedRect: bounds.insetBy(dx: 1, dy: 1),
-            xRadius: cornerRadius,
-            yRadius: cornerRadius
-        )
-        NSColor.black.withAlphaComponent(0.6).setFill()
+        let body = bounds.insetBy(dx: 1, dy: 1)
+        let cornerRadius = cross * 0.14
+
+        let housing = NSBezierPath(roundedRect: body, xRadius: cornerRadius, yRadius: cornerRadius)
+        NSColor(white: 0.08, alpha: 0.92).setFill()
         housing.fill()
+        NSColor(white: 1.0, alpha: 0.08).setStroke()
+        housing.lineWidth = 1
+        housing.stroke()
 
-        drawLamps(cross: cross)
-        if isHovering {
-            drawGripHandle(cross: cross)
-        }
-    }
-
-    private func drawLamps(cross: CGFloat) {
         let lamps: [(SessionState, NSColor)] = [
             (.waiting, .systemRed),
             (.running, .systemYellow),
             (.done, .systemGreen),
         ]
-        // Lamps live in the region outside the grip strip (above it when
-        // vertical, left of it when horizontal); red stays first.
-        let mainLength = (isVertical ? bounds.height : bounds.width) - gripStripLength
-        let diameter = min(cross * 0.6, mainLength * 0.28)
-        let spacing = diameter / 3
-        let groupLength = CGFloat(lamps.count) * diameter + CGFloat(lamps.count - 1) * spacing
+        let segmentLength = (isVertical ? body.height : body.width) / CGFloat(lamps.count)
 
+        // Red is first: on top when vertical, on the left when horizontal.
         for (index, (state, color)) in lamps.enumerated() {
-            let offset = CGFloat(index) * (diameter + spacing)
-            let rect: NSRect
+            let segment: NSRect
             if isVertical {
-                let regionMidY = gripStripLength + mainLength / 2
-                let top = regionMidY + groupLength / 2 - diameter
-                rect = NSRect(x: bounds.midX - diameter / 2, y: top - offset, width: diameter, height: diameter)
+                segment = NSRect(
+                    x: body.minX,
+                    y: body.maxY - CGFloat(index + 1) * segmentLength,
+                    width: body.width,
+                    height: segmentLength
+                )
             } else {
-                let regionMidX = mainLength / 2
-                let left = regionMidX - groupLength / 2
-                rect = NSRect(x: left + offset, y: bounds.midY - diameter / 2, width: diameter, height: diameter)
+                segment = NSRect(
+                    x: body.minX + CGFloat(index) * segmentLength,
+                    y: body.minY,
+                    width: segmentLength,
+                    height: body.height
+                )
             }
-            drawLamp(in: rect, color: color, lit: state == worst)
+
+            if index > 0 {
+                drawDivider(before: segment)
+            }
+            drawLamp(in: segment, color: color, lit: state == worst)
         }
     }
 
-    private func drawLamp(in rect: NSRect, color: NSColor, lit: Bool) {
-        NSGraphicsContext.saveGraphicsState()
-        defer { NSGraphicsContext.restoreGraphicsState() }
+    /// Thin seam between segments, like the joints of a real signal head.
+    private func drawDivider(before segment: NSRect) {
+        let seam = NSBezierPath()
+        if isVertical {
+            seam.move(to: NSPoint(x: segment.minX + 2, y: segment.maxY))
+            seam.line(to: NSPoint(x: segment.maxX - 2, y: segment.maxY))
+        } else {
+            seam.move(to: NSPoint(x: segment.minX, y: segment.minY + 2))
+            seam.line(to: NSPoint(x: segment.minX, y: segment.maxY - 2))
+        }
+        seam.lineWidth = 1
+        NSColor(white: 0, alpha: 0.55).setStroke()
+        seam.stroke()
+    }
 
+    private func drawLamp(in segment: NSRect, color: NSColor, lit: Bool) {
+        let diameter = min(segment.width, segment.height) * 0.78
+        let rect = NSRect(
+            x: segment.midX - diameter / 2,
+            y: segment.midY - diameter / 2,
+            width: diameter,
+            height: diameter
+        )
+        let circle = NSBezierPath(ovalIn: rect)
+
+        NSGraphicsContext.saveGraphicsState()
         if lit {
             let glow = NSShadow()
             glow.shadowColor = color
-            glow.shadowBlurRadius = rect.width / 3
+            glow.shadowBlurRadius = diameter / 3
             glow.set()
             color.setFill()
-        } else {
-            color.withAlphaComponent(0.18).setFill()
+            circle.fill()
         }
-        NSBezierPath(ovalIn: rect).fill()
-    }
+        NSGraphicsContext.restoreGraphicsState()
 
-    /// Fat round-capped arc in the grip strip, following the housing's end
-    /// curve — the visual for the resize lever.
-    private func drawGripHandle(cross: CGFloat) {
-        let radius = cross * 0.45
-        let lineWidth = max(3, cross * 0.12)
-        let arcRadius = radius - lineWidth / 2 - 2.5
-
-        let center: NSPoint
-        let startAngle: CGFloat
-        let endAngle: CGFloat
-        if isVertical {
-            // Smile along the bottom end of the housing.
-            center = NSPoint(x: bounds.midX, y: bounds.minY + 1 + radius)
-            startAngle = -140
-            endAngle = -40
+        // Glossy face: radial gradient with an off-center highlight, matching
+        // the lens look of a real signal lamp. Unlit lamps keep a dark tint
+        // of their hue so the fixture still reads as a traffic light.
+        let gradient: NSGradient?
+        if lit {
+            gradient = NSGradient(colors: [
+                color.blended(withFraction: 0.75, of: .white) ?? color,
+                color,
+                color.blended(withFraction: 0.35, of: .black) ?? color,
+            ], atLocations: [0.0, 0.55, 1.0], colorSpace: .deviceRGB)
         } else {
-            // Bracket along the right end of the housing.
-            center = NSPoint(x: bounds.maxX - 1 - radius, y: bounds.midY)
-            startAngle = -50
-            endAngle = 50
+            let dark = color.blended(withFraction: 0.65, of: .black) ?? color
+            gradient = NSGradient(colors: [
+                dark.withAlphaComponent(0.5),
+                dark.withAlphaComponent(0.35),
+            ], atLocations: [0.0, 1.0], colorSpace: .deviceRGB)
         }
+        gradient?.draw(in: circle, relativeCenterPosition: NSPoint(x: -0.2, y: 0.25))
 
-        let arc = NSBezierPath()
-        arc.appendArc(withCenter: center, radius: arcRadius, startAngle: startAngle, endAngle: endAngle)
-        arc.lineWidth = lineWidth
-        arc.lineCapStyle = .round
-        NSColor.white.withAlphaComponent(0.6).setStroke()
-        arc.stroke()
-    }
-}
-
-/// Invisible drag handle covering the grip strip. Opts out of
-/// window-background moves and implements aspect-preserving resize itself,
-/// anchored at the window's top-left, clamped to the window's min/max size.
-private final class ResizeGripView: NSView {
-    private var startFrame: NSRect = .zero
-    private var startMouse: NSPoint = .zero
-
-    override var mouseDownCanMoveWindow: Bool { false }
-
-    override func mouseDown(with event: NSEvent) {
-        guard let window else { return }
-        startFrame = window.frame
-        startMouse = NSEvent.mouseLocation
-    }
-
-    override func mouseDragged(with event: NSEvent) {
-        guard let window else { return }
-        let mouse = NSEvent.mouseLocation
-        // Dragging away from the window's top-left (right or down) grows.
-        let growth = max(mouse.x - startMouse.x, startMouse.y - mouse.y)
-
-        let longSide = max(startFrame.width, startFrame.height)
-        var scale = (longSide + growth) / longSide
-        let minScale = max(window.minSize.width / startFrame.width,
-                           window.minSize.height / startFrame.height)
-        let maxScale = min(window.maxSize.width / startFrame.width,
-                           window.maxSize.height / startFrame.height)
-        scale = min(max(scale, minScale), maxScale)
-
-        let size = NSSize(width: startFrame.width * scale, height: startFrame.height * scale)
-        let frame = NSRect(
-            x: startFrame.minX,
-            y: startFrame.maxY - size.height,
-            width: size.width,
-            height: size.height
-        )
-        window.setFrame(frame, display: true)
-    }
-
-    override func resetCursorRects() {
-        addCursorRect(bounds, cursor: .crosshair)
+        // Bezel ring around the lens.
+        NSColor(white: 0, alpha: 0.6).setStroke()
+        circle.lineWidth = max(1, diameter * 0.05)
+        circle.stroke()
     }
 }

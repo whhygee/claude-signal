@@ -88,6 +88,8 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             }
             orientationItem.submenu = submenu
             menu.addItem(orientationItem)
+
+            menu.addItem(sizeSliderItem())
         }
 
         let clear = NSMenuItem(title: "Clear All", action: #selector(clearAll), keyEquivalent: "")
@@ -118,6 +120,33 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         return item
     }
 
+    /// Menu row hosting a live slider that scales the floating light.
+    private func sizeSliderItem() -> NSMenuItem {
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: 220, height: 26))
+
+        let label = NSTextField(labelWithString: "Size")
+        label.font = .menuFont(ofSize: NSFont.smallSystemFontSize)
+        label.textColor = .secondaryLabelColor
+        label.frame = NSRect(x: 14, y: 5, width: 34, height: 16)
+        container.addSubview(label)
+
+        let slider = NSSlider(
+            value: Double(floatingLight.scale),
+            minValue: Double(FloatingLightController.minScale),
+            maxValue: Double(FloatingLightController.maxScale),
+            target: self,
+            action: #selector(sizeSliderChanged(_:))
+        )
+        slider.isContinuous = true
+        slider.controlSize = .small
+        slider.frame = NSRect(x: 52, y: 4, width: 154, height: 18)
+        container.addSubview(slider)
+
+        let item = NSMenuItem()
+        item.view = container
+        return item
+    }
+
     private static let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "HH:mm:ss"
@@ -135,10 +164,14 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             guard let app = NSRunningApplication(processIdentifier: ancestor),
                   app.activationPolicy == .regular
             else { continue }
+            app.unhide()
             if #available(macOS 14.0, *) {
-                app.activate()
+                // Cooperative activation: hand our activation claim to the
+                // target, or plain activate() from an accessory app is a no-op.
+                NSApp.yieldActivation(to: app)
+                app.activate(options: [.activateAllWindows])
             } else {
-                app.activate(options: [.activateIgnoringOtherApps])
+                app.activate(options: [.activateAllWindows, .activateIgnoringOtherApps])
             }
             return
         }
@@ -152,6 +185,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     @objc private func setOrientation(_ sender: NSMenuItem) {
         guard let orientation = sender.representedObject as? LightOrientation else { return }
         floatingLight.setOrientation(orientation)
+    }
+
+    @objc private func sizeSliderChanged(_ sender: NSSlider) {
+        floatingLight.setScale(CGFloat(sender.doubleValue))
     }
 
     @objc private func clearAll() {

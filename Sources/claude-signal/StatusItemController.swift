@@ -7,6 +7,7 @@ import SignalCore
 final class StatusItemController: NSObject, NSMenuDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let menu = NSMenu()
+    private let floatingLight = FloatingLightController()
     private var timer: Timer?
     private var sessions: [Session] = []
 
@@ -15,6 +16,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     func start() {
         menu.delegate = self
         statusItem.menu = menu
+        floatingLight.applyPersistedState()
         refresh()
         let timer = Timer.scheduledTimer(withTimeInterval: Self.refreshInterval, repeats: true) { [weak self] _ in
             self?.refresh()
@@ -28,6 +30,7 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     private func refresh() {
         sessions = SessionStore.loadLive()
         statusItem.button?.attributedTitle = title(for: sessions)
+        floatingLight.update(sessions: sessions)
     }
 
     /// Aggregate signal: the worst state across sessions wins
@@ -68,6 +71,11 @@ final class StatusItemController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
 
+        let floating = NSMenuItem(title: "Floating Light", action: #selector(toggleFloatingLight), keyEquivalent: "")
+        floating.target = self
+        floating.state = floatingLight.isEnabled ? .on : .off
+        menu.addItem(floating)
+
         let clear = NSMenuItem(title: "Clear All", action: #selector(clearAll), keyEquivalent: "")
         clear.target = self
         menu.addItem(clear)
@@ -97,6 +105,11 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }()
 
     // MARK: - Actions
+
+    @objc private func toggleFloatingLight() {
+        floatingLight.toggle()
+        floatingLight.update(sessions: sessions)
+    }
 
     @objc private func clearAll() {
         for session in sessions {

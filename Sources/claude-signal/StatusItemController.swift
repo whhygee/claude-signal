@@ -76,6 +76,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
         floating.state = floatingLight.isEnabled ? .on : .off
         menu.addItem(floating)
 
+        if floatingLight.isEnabled {
+            let rotate = NSMenuItem(title: "Rotate Floating Light", action: #selector(rotateFloatingLight), keyEquivalent: "")
+            rotate.target = self
+            menu.addItem(rotate)
+        }
+
         let clear = NSMenuItem(title: "Clear All", action: #selector(clearAll), keyEquivalent: "")
         clear.target = self
         menu.addItem(clear)
@@ -109,6 +115,10 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     @objc private func toggleFloatingLight() {
         floatingLight.toggle()
         floatingLight.update(sessions: sessions)
+    }
+
+    @objc private func rotateFloatingLight() {
+        floatingLight.rotate()
     }
 
     @objc private func clearAll() {

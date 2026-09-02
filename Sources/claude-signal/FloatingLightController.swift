@@ -1,9 +1,6 @@
 import AppKit
 import SignalCore
 
-/// Optional floating traffic light: a small always-on-top, draggable panel
-/// mirroring the aggregate session state. Toggled from the menu bar menu;
-/// visibility and position persist across launches.
 /// Layout axis of the floating light.
 enum LightOrientation: String, CaseIterable {
     case vertical
@@ -12,6 +9,9 @@ enum LightOrientation: String, CaseIterable {
     var title: String { rawValue.capitalized }
 }
 
+/// Optional floating traffic light: a small always-on-top, draggable panel
+/// mirroring the aggregate session state. Toggled from the menu bar menu;
+/// visibility, position, and orientation persist across launches.
 final class FloatingLightController {
     private static let enabledDefaultsKey = "floatingLightEnabled"
     private static let orientationDefaultsKey = "floatingLightOrientation"
@@ -131,142 +131,5 @@ final class FloatingLightController {
         guard let screen = NSScreen.main else { return NSPoint(x: 100, y: 100) }
         let frame = screen.visibleFrame
         return NSPoint(x: frame.maxX - size.width - 24, y: frame.maxY - size.height - 12)
-    }
-}
-
-/// Classic vertical three-lamp traffic light. The lamp for the current
-/// aggregate state glows; the others stay dim. All lamps dim when no
-/// sessions are active.
-final class TrafficLightView: NSView {
-    static let defaultSize = NSSize(width: 30, height: 78)
-
-    private var worst: SessionState?
-    private var count = 0
-
-    /// Layout axis, set by the controller from the persisted orientation —
-    /// never inferred from the frame's shape.
-    var isVertical = true {
-        didSet { needsDisplay = true }
-    }
-
-    private var isHovering = false
-
-    override var mouseDownCanMoveWindow: Bool { true }
-
-    // MARK: - Hover tracking (resize affordance)
-
-    override func updateTrackingAreas() {
-        trackingAreas.forEach(removeTrackingArea)
-        addTrackingArea(NSTrackingArea(
-            rect: .zero,
-            options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
-            owner: self
-        ))
-        super.updateTrackingAreas()
-    }
-
-    override func mouseEntered(with event: NSEvent) {
-        isHovering = true
-        needsDisplay = true
-    }
-
-    override func mouseExited(with event: NSEvent) {
-        isHovering = false
-        needsDisplay = true
-    }
-
-    func render(worst: SessionState?, count: Int) {
-        guard worst != self.worst || count != self.count else { return }
-        self.worst = worst
-        self.count = count
-        toolTip = worst == nil
-            ? "No active Claude sessions"
-            : "\(count) Claude session\(count == 1 ? "" : "s") — \(worst!.rawValue)"
-        needsDisplay = true
-    }
-
-    override func draw(_ dirtyRect: NSRect) {
-        let vertical = isVertical
-        let cross = vertical ? bounds.width : bounds.height
-        let mainLength = vertical ? bounds.height : bounds.width
-        let cornerRadius = cross * 0.45
-        let housing = NSBezierPath(
-            roundedRect: bounds.insetBy(dx: 1, dy: 1),
-            xRadius: cornerRadius,
-            yRadius: cornerRadius
-        )
-        NSColor.black.withAlphaComponent(0.6).setFill()
-        housing.fill()
-
-        let lamps: [(SessionState, NSColor)] = [
-            (.waiting, .systemRed),
-            (.running, .systemYellow),
-            (.done, .systemGreen),
-        ]
-        // The aspect lock keeps proportions during resize; the main-axis cap
-        // is a second line of defense so lamps can never overflow the housing.
-        let diameter = min(cross * 0.6, mainLength * 0.25)
-        let spacing = diameter / 3
-        let groupLength = CGFloat(lamps.count) * diameter + CGFloat(lamps.count - 1) * spacing
-
-        // Red is first: on top when vertical, on the left when horizontal.
-        for (index, (state, color)) in lamps.enumerated() {
-            let offset = CGFloat(index) * (diameter + spacing)
-            let rect: NSRect
-            if vertical {
-                let top = bounds.midY + groupLength / 2 - diameter
-                rect = NSRect(x: bounds.midX - diameter / 2, y: top - offset, width: diameter, height: diameter)
-            } else {
-                let left = bounds.midX - groupLength / 2
-                rect = NSRect(x: left + offset, y: bounds.midY - diameter / 2, width: diameter, height: diameter)
-            }
-            drawLamp(in: rect, color: color, lit: state == worst)
-        }
-
-        if isHovering {
-            drawResizeGrip()
-        }
-    }
-
-    /// Resize affordance shown on hover: a short, fat, round-capped arc
-    /// hugging the housing's bottom-right corner. Following the corner
-    /// curve keeps it in the ring between the lamps and the border, so it
-    /// never overlaps a lamp at any size.
-    private func drawResizeGrip() {
-        let cross = isVertical ? bounds.width : bounds.height
-        let cornerRadius = cross * 0.45
-        let cornerCenter = NSPoint(
-            x: bounds.maxX - 1 - cornerRadius,
-            y: bounds.minY + 1 + cornerRadius
-        )
-        let lineWidth = max(2.5, cross * 0.1)
-
-        let arc = NSBezierPath()
-        arc.appendArc(
-            withCenter: cornerCenter,
-            radius: cornerRadius - lineWidth / 2 - 2,
-            startAngle: -80,
-            endAngle: -10
-        )
-        arc.lineWidth = lineWidth
-        arc.lineCapStyle = .round
-        NSColor.white.withAlphaComponent(0.55).setStroke()
-        arc.stroke()
-    }
-
-    private func drawLamp(in rect: NSRect, color: NSColor, lit: Bool) {
-        NSGraphicsContext.saveGraphicsState()
-        defer { NSGraphicsContext.restoreGraphicsState() }
-
-        if lit {
-            let glow = NSShadow()
-            glow.shadowColor = color
-            glow.shadowBlurRadius = rect.width / 3
-            glow.set()
-            color.setFill()
-        } else {
-            color.withAlphaComponent(0.18).setFill()
-        }
-        NSBezierPath(ovalIn: rect).fill()
     }
 }

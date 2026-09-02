@@ -1,0 +1,117 @@
+import AppKit
+import SignalCore
+
+/// Owns the menu bar item: one aggregate traffic-light dot plus a
+/// per-session dropdown. Refreshes on a timer; the menu itself is
+/// rebuilt lazily via NSMenuDelegate so it is never mutated while open.
+final class StatusItemController: NSObject, NSMenuDelegate {
+    private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+    private let menu = NSMenu()
+    private var timer: Timer?
+    private var sessions: [Session] = []
+
+    private static let refreshInterval: TimeInterval = 1.0
+
+    func start() {
+        menu.delegate = self
+        statusItem.menu = menu
+        refresh()
+        let timer = Timer.scheduledTimer(withTimeInterval: Self.refreshInterval, repeats: true) { [weak self] _ in
+            self?.refresh()
+        }
+        timer.tolerance = Self.refreshInterval / 4
+        self.timer = timer
+    }
+
+    // MARK: - Rendering
+
+    private func refresh() {
+        sessions = SessionStore.loadLive()
+        statusItem.button?.attributedTitle = title(for: sessions)
+    }
+
+    /// Aggregate signal: the worst state across sessions wins
+    /// (sessions arrive sorted most-urgent first).
+    private func title(for sessions: [Session]) -> NSAttributedString {
+        let title = NSMutableAttributedString()
+        guard let worst = sessions.first else {
+            title.append(NSAttributedString(string: "○", attributes: [
+                .foregroundColor: NSColor.tertiaryLabelColor,
+                .font: NSFont.systemFont(ofSize: 14),
+            ]))
+            return title
+        }
+        title.append(NSAttributedString(string: "●", attributes: [
+            .foregroundColor: worst.state.color,
+            .font: NSFont.systemFont(ofSize: 14),
+        ]))
+        if sessions.count > 1 {
+            title.append(NSAttributedString(string: " \(sessions.count)", attributes: [
+                .foregroundColor: NSColor.secondaryLabelColor,
+                .font: NSFont.systemFont(ofSize: 11),
+            ]))
+        }
+        return title
+    }
+
+    // MARK: - NSMenuDelegate
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        menu.removeAllItems()
+
+        if sessions.isEmpty {
+            menu.addItem(NSMenuItem(title: "No active Claude sessions", action: nil, keyEquivalent: ""))
+        }
+        for session in sessions {
+            menu.addItem(menuItem(for: session))
+        }
+
+        menu.addItem(.separator())
+
+        let clear = NSMenuItem(title: "Clear All", action: #selector(clearAll), keyEquivalent: "")
+        clear.target = self
+        menu.addItem(clear)
+
+        menu.addItem(NSMenuItem(title: "Quit Claude Signal",
+                                action: #selector(NSApplication.terminate(_:)),
+                                keyEquivalent: "q"))
+    }
+
+    private func menuItem(for session: Session) -> NSMenuItem {
+        let directory = session.cwd.isEmpty ? "?" : (session.cwd as NSString).lastPathComponent
+        let time = Self.timeFormatter.string(from: Date(timeIntervalSince1970: session.timestamp))
+
+        let item = NSMenuItem()
+        let label = NSMutableAttributedString()
+        label.append(NSAttributedString(string: "● ", attributes: [.foregroundColor: session.state.color]))
+        label.append(NSAttributedString(string: "\(directory)  —  \(session.state.rawValue)  (\(time))"))
+        item.attributedTitle = label
+        item.toolTip = "\(session.cwd)\n\(session.id)"
+        return item
+    }
+
+    private static let timeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+        return formatter
+    }()
+
+    // MARK: - Actions
+
+    @objc private func clearAll() {
+        for session in sessions {
+            SessionStore.remove(id: session.id)
+        }
+        refresh()
+    }
+}
+
+private extension SessionState {
+    var color: NSColor {
+        switch self {
+        case .waiting: return .systemRed
+        case .running: return .systemYellow
+        case .done: return .systemGreen
+        }
+    }
+}

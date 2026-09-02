@@ -6,7 +6,11 @@ enum InitCommand {
     private static let eventStates: [(event: String, state: String)] = [
         ("SessionStart", "done"),
         ("UserPromptSubmit", "running"),
-        ("Notification", "waiting"),
+        // `notify` escalates to waiting only mid-turn; idle notifications
+        // after a finished turn keep the session green.
+        ("Notification", "notify"),
+        // First tool run after an approved permission clears the red state.
+        ("PostToolUse", "running"),
         ("Stop", "done"),
         ("SessionEnd", "end"),
     ]

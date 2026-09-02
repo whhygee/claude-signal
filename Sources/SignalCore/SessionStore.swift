@@ -15,6 +15,11 @@ public enum SessionStore {
         directory.appendingPathComponent(id).appendingPathExtension("json")
     }
 
+    public static func read(id: String) -> Session? {
+        guard let data = try? Data(contentsOf: fileURL(for: id)) else { return nil }
+        return try? JSONDecoder().decode(Session.self, from: data)
+    }
+
     public static func write(_ session: Session) throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let data = try JSONEncoder().encode(session)

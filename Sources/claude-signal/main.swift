@@ -24,7 +24,7 @@ case "-h", "--help", "help":
                                         you, yellow = working, green = results ready)
           claude-signal init            Install session hooks into ~/.claude/settings.json
           claude-signal hook <state>    Record a session state; called by Claude Code
-                                        hooks (state: waiting | running | done | end)
+                                        hooks (state: waiting | running | done | notify | end)
         """
     )
 default:

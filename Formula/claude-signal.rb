@@ -1,8 +1,8 @@
 class ClaudeSignal < Formula
   desc "Menu bar traffic light for Claude Code sessions"
   homepage "https://github.com/whhygee/claude-signal"
-  url "https://github.com/whhygee/claude-signal/archive/refs/tags/v0.0.2.tar.gz"
-  sha256 "9a20e417294d3013b8190413934287a1e6e1d57f83d05c3070691caa444fc0ab"
+  url "https://github.com/whhygee/claude-signal/archive/refs/tags/v0.0.3.tar.gz"
+  sha256 "16b805c3c2580a4584a5b0376ebf79e4c8f036bfc77e89e3a3bec00a87f6bea3"
   license "MIT"
 
   depends_on :macos

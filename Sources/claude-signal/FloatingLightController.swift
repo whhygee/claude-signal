@@ -228,20 +228,30 @@ final class TrafficLightView: NSView {
         }
     }
 
-    /// Classic diagonal-lines grip in the bottom-right corner, shown on
-    /// hover so users discover the edge-drag resize.
+    /// Resize affordance shown on hover: a short, fat, round-capped arc
+    /// hugging the housing's bottom-right corner. Following the corner
+    /// curve keeps it in the ring between the lamps and the border, so it
+    /// never overlaps a lamp at any size.
     private func drawResizeGrip() {
-        let inset: CGFloat = 5
-        let corner = NSPoint(x: bounds.maxX - inset, y: bounds.minY + inset)
+        let cross = isVertical ? bounds.width : bounds.height
+        let cornerRadius = cross * 0.45
+        let cornerCenter = NSPoint(
+            x: bounds.maxX - 1 - cornerRadius,
+            y: bounds.minY + 1 + cornerRadius
+        )
+        let lineWidth = max(2.5, cross * 0.1)
+
+        let arc = NSBezierPath()
+        arc.appendArc(
+            withCenter: cornerCenter,
+            radius: cornerRadius - lineWidth / 2 - 2,
+            startAngle: -80,
+            endAngle: -10
+        )
+        arc.lineWidth = lineWidth
+        arc.lineCapStyle = .round
         NSColor.white.withAlphaComponent(0.55).setStroke()
-        for line in 1...3 {
-            let offset = CGFloat(line) * 3.5
-            let path = NSBezierPath()
-            path.move(to: NSPoint(x: corner.x - offset, y: corner.y))
-            path.line(to: NSPoint(x: corner.x, y: corner.y + offset))
-            path.lineWidth = 1.5
-            path.stroke()
-        }
+        arc.stroke()
     }
 
     private func drawLamp(in rect: NSRect, color: NSColor, lit: Bool) {

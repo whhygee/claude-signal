@@ -6,6 +6,7 @@ import SignalCore
 /// visibility and position persist across launches.
 final class FloatingLightController {
     private static let enabledDefaultsKey = "floatingLightEnabled"
+    private static let verticalDefaultsKey = "floatingLightVertical"
     private static let frameAutosaveName = "FloatingLight"
 
     private var panel: NSPanel?
@@ -13,6 +14,11 @@ final class FloatingLightController {
 
     var isEnabled: Bool {
         UserDefaults.standard.bool(forKey: Self.enabledDefaultsKey)
+    }
+
+    private var isVertical: Bool {
+        get { UserDefaults.standard.object(forKey: Self.verticalDefaultsKey) as? Bool ?? true }
+        set { UserDefaults.standard.set(newValue, forKey: Self.verticalDefaultsKey) }
     }
 
     func applyPersistedState() {
@@ -29,30 +35,49 @@ final class FloatingLightController {
         lightView?.render(worst: sessions.first?.state, count: sessions.count)
     }
 
-    /// Swaps width and height around the panel's center. Orientation is
-    /// derived from the frame's shape, so this flips vertical ↔ horizontal;
-    /// frame autosave persists the result.
+    /// Flips vertical ↔ horizontal. Orientation is an explicit setting,
+    /// changed only here — resizing just scales the current shape.
     func rotate() {
-        guard let panel else { return }
+        isVertical.toggle()
+        applyOrientation(animated: true)
+    }
+
+    /// Enforces the stored orientation: fixes the view's layout axis, locks
+    /// the resize aspect ratio, and reshapes/clamps the frame around its
+    /// center. Also repairs a frame saved with bad proportions.
+    private func applyOrientation(animated: Bool) {
+        guard let panel, let lightView else { return }
+        lightView.isVertical = isVertical
+
+        let base = TrafficLightView.defaultSize
+        let aspect = isVertical
+            ? base
+            : NSSize(width: base.height, height: base.width)
+        panel.contentAspectRatio = aspect
+        panel.minSize = scaled(aspect, by: 0.8)
+        panel.maxSize = scaled(aspect, by: 3.0)
+
+        // Rebuild the frame at the current scale (long side preserved),
+        // clamped to bounds, centered where the panel already is.
         let frame = panel.frame
-        let rotated = NSRect(
-            x: frame.midX - frame.height / 2,
-            y: frame.midY - frame.width / 2,
-            width: frame.height,
-            height: frame.width
+        let longSide = min(max(max(frame.width, frame.height), max(aspect.width, aspect.height) * 0.8),
+                           max(aspect.width, aspect.height) * 3.0)
+        let scale = longSide / max(aspect.width, aspect.height)
+        let size = scaled(aspect, by: scale)
+        let reshaped = NSRect(
+            x: frame.midX - size.width / 2,
+            y: frame.midY - size.height / 2,
+            width: size.width,
+            height: size.height
         )
-        panel.setFrame(rotated, display: true, animate: true)
+        panel.setFrame(reshaped, display: true, animate: animated)
+    }
+
+    private func scaled(_ size: NSSize, by factor: CGFloat) -> NSSize {
+        NSSize(width: size.width * factor, height: size.height * factor)
     }
 
     // MARK: - Panel lifecycle
-
-    private func show() {
-        if panel == nil {
-            let panel = makePanel()
-            self.panel = panel
-        }
-        panel?.orderFrontRegardless()
-    }
 
     private func hide() {
         panel?.orderOut(nil)
@@ -68,8 +93,6 @@ final class FloatingLightController {
             backing: .buffered,
             defer: false
         )
-        panel.minSize = NSSize(width: 22, height: 22)
-        panel.maxSize = NSSize(width: 400, height: 400)
         panel.level = .floating
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.isOpaque = false
@@ -83,6 +106,14 @@ final class FloatingLightController {
         panel.contentView = view
         lightView = view
         return panel
+    }
+
+    private func show() {
+        if panel == nil {
+            panel = makePanel()
+        }
+        applyOrientation(animated: false)
+        panel?.orderFrontRegardless()
     }
 
     /// First-launch position: just under the menu bar, near the right edge.
@@ -102,6 +133,12 @@ final class TrafficLightView: NSView {
     private var worst: SessionState?
     private var count = 0
 
+    /// Layout axis, set by the controller from the persisted orientation —
+    /// never inferred from the frame's shape.
+    var isVertical = true {
+        didSet { needsDisplay = true }
+    }
+
     override var mouseDownCanMoveWindow: Bool { true }
 
     func render(worst: SessionState?, count: Int) {
@@ -115,11 +152,9 @@ final class TrafficLightView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        // Orientation follows the frame's shape: taller than wide draws a
-        // vertical light, wider than tall a horizontal one. Lamp geometry
-        // scales with the cross-axis so resizing scales the whole light.
-        let vertical = bounds.height >= bounds.width
+        let vertical = isVertical
         let cross = vertical ? bounds.width : bounds.height
+        let mainLength = vertical ? bounds.height : bounds.width
         let cornerRadius = cross * 0.45
         let housing = NSBezierPath(
             roundedRect: bounds.insetBy(dx: 1, dy: 1),
@@ -134,7 +169,9 @@ final class TrafficLightView: NSView {
             (.running, .systemYellow),
             (.done, .systemGreen),
         ]
-        let diameter = cross * 0.6
+        // The aspect lock keeps proportions during resize; the main-axis cap
+        // is a second line of defense so lamps can never overflow the housing.
+        let diameter = min(cross * 0.6, mainLength * 0.25)
         let spacing = diameter / 3
         let groupLength = CGFloat(lamps.count) * diameter + CGFloat(lamps.count - 1) * spacing
 

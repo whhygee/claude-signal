@@ -102,13 +102,12 @@ final class StatusItemController: NSObject, NSMenuDelegate {
     }
 
     private func menuItem(for session: Session) -> NSMenuItem {
-        let directory = session.cwd.isEmpty ? "?" : (session.cwd as NSString).lastPathComponent
         let time = Self.timeFormatter.string(from: Date(timeIntervalSince1970: session.timestamp))
 
         let item = NSMenuItem()
         let label = NSMutableAttributedString()
         label.append(NSAttributedString(string: "● ", attributes: [.foregroundColor: session.state.color]))
-        label.append(NSAttributedString(string: "\(directory)  —  \(session.state.rawValue)  (\(time))"))
+        label.append(NSAttributedString(string: "\(displayName(for: session))  —  \(session.state.rawValue)  (\(time))"))
         item.attributedTitle = label
         item.toolTip = "\(session.cwd)\n\(session.id)"
         if session.pid != nil {
@@ -118,6 +117,22 @@ final class StatusItemController: NSObject, NSMenuDelegate {
             item.toolTip = "Click to open this session's window\n\(session.cwd)\n\(session.id)"
         }
         return item
+    }
+
+    /// Session label: the terminal window's title (Claude Code sets it to
+    /// the session topic) when we can read it, else the working directory's
+    /// basename. Truncated so one long topic can't stretch the menu.
+    private func displayName(for session: Session) -> String {
+        let fallback = session.cwd.isEmpty ? "?" : (session.cwd as NSString).lastPathComponent
+        guard let pid = session.pid, let windowID = session.windowID,
+              let appPID = ProcessTree.ancestry(of: pid).first(where: { ancestor in
+                  NSRunningApplication(processIdentifier: ancestor)?.activationPolicy == .regular
+              }),
+              let title = WindowRaiser.title(windowID: windowID, appPID: appPID)
+        else { return fallback }
+
+        let trimmed = title.trimmingCharacters(in: .whitespaces)
+        return trimmed.count > 40 ? String(trimmed.prefix(39)) + "…" : trimmed
     }
 
     /// Menu row hosting a live slider that scales the floating light.
